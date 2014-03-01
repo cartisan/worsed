@@ -1,5 +1,5 @@
-import pdb
 import string
+from collections import Counter
 from nltk.corpus import stopwords, brown
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
@@ -8,7 +8,7 @@ from numpy import array
 # constants
 dim_num = 2
 feat_num = 7
-window_radius = 7  # how many words to include at each side of occurance
+window_radius = 3  # how many words to include at each side of occurance
 
 # containers
 word_vectors = {}  # maps from features words to lists containing their vectors
@@ -20,9 +20,11 @@ test_corpus = ['"', 'But', 'I', "don't", 'want', 'to', 'go', 'among', 'mad', 'pe
 
 
 def cleanse_corpus(corpus):
-    " Returns copy of list with removed stop words and punctuation marks"
+    """ Returns lowercase copy of list with removed stop words and punctuation
+    marks.
+    """
 
-    return [word for word in corpus if
+    return [word.lower() for word in corpus if
             word.lower() not in stopwords.words('english') and
             word not in string.punctuation]
 
@@ -43,8 +45,22 @@ def sized_context(word_index, window_radius, corpus):
     return corpus[left_border:word_index] + corpus[word_index+1: right_border]
 
 
-def word_vector_from_context(contet, dimensions):
-    pass
+def word_vector_from_context(context, dimensions):
+    """ Takes a list of words as context and a list of words as dimensions
+    and returns a vector denoting how often each dimension word appeared
+    in the context. Order of dimensions in return is presereved.
+    """
+
+    word_vector = []
+    # slow! Manual: context.count(word) for each word would be faster
+    counts = Counter(context)
+
+    for word in dimensions:
+        # slow! if/else would be faster
+        count = counts.get(word, 0)
+        word_vector.append(count)
+
+    return word_vector
 
 
 def train(corpus):
@@ -60,15 +76,16 @@ def train(corpus):
     # create word vectors for features
     offset_index = ConcordanceIndex(filtered, key=lambda s: s.lower())
     for word in features:
+        context = []
         # get word positions in text
         offsets = offset_index.offsets(word)
 
+        # collect ALL contexts for word vector
         for offset in offsets:
-            context = sized_context(offset, window_radius, filtered)
-            pdb.set_trace() ############################## Breakpoint ##############################
-            #word_vector = word_vector_from_context(context, dimensions)
-            #word_vectors[word] = word_vector
-            # update word_vector for context
+            context += sized_context(offset, window_radius, filtered)
+
+        word_vector = word_vector_from_context(context, dimensions)
+        word_vectors[word] = word_vector
 
     # create context vectors for ambigous words
     # create sense vectors for ambigous context vectors
