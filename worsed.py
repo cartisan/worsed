@@ -1,9 +1,11 @@
+import pdb
 import string
 from collections import Counter
-from nltk.corpus import stopwords, brown
+from nltk.corpus import stopwords
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
-from numpy import array, zeros
+from numpy import array, zeros, vstack
+from scipy.cluster.vq import kmeans2
 
 
 # TODO: lemmatization?
@@ -13,11 +15,14 @@ from numpy import array, zeros
 dim_num = 2
 feat_num = 7
 window_radius = 3  # how many words to include at each side of occurance
-ambigous_words = ['cat']
+cluster_num = 2
+ambigous_words = ['mad']
 
 # containers
 word_vectors = {}  # maps from feature-words to lists containing their vectors
 context_vectors = {}  # maps from ambiguous words to lists of context vectors
+sense_vectors = {}  # maps from ambiguous words to ndarray of sense vectors
+
 
 test_corpus = ['"', 'But', 'I', "don't", 'want', 'to', 'go', 'among', 'mad', 'people', ',', '"', 'Alice', 'remarked', '.', 'Oh', ',',
 'you', "can't", 'help', 'that', ',', 'said', 'the', 'Cat', ':', "'we're", 'all', 'mad', 'here', '.', "I'm", 'mad', '.', "You're", 'mad', '.',
@@ -109,8 +114,8 @@ def train_sec_order(corpus):
         word_vector = word_vector_from_context(context, dimensions)
         word_vectors[word] = word_vector
 
-    # create context vectors for ambigous words
     for word in ambigous_words:
+        # create context vectors for ambigous words
         vectors = []
         offsets = offset_index.offsets(word)
         for offset in offsets:
@@ -118,7 +123,10 @@ def train_sec_order(corpus):
             vectors.append(context_vector_from_context(context, word_vectors))
         context_vectors[word] = vectors
 
-    # create sense vectors for ambigous context vectors
+        # create sense vectors for ambigous context vectors
+        context_matrix = vstack(vectors)
+        centroids, _ = kmeans2(context_matrix, cluster_num)
+        sense_vectors[word] = centroids
 
 
 train_sec_order(test_corpus)
