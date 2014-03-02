@@ -4,9 +4,8 @@ from collections import Counter
 from nltk.corpus import stopwords
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
-from numpy import array, zeros, vstack
+from numpy import array, zeros, vstack, linspace
 from scipy.cluster.vq import kmeans2
-
 
 # TODO: lemmatization?
 # TODO: normalization of word-vectors in context-vector creation?
@@ -28,6 +27,21 @@ test_corpus = ['"', 'But', 'I', "don't", 'want', 'to', 'go', 'among', 'mad', 'pe
 'you', "can't", 'help', 'that', ',', 'said', 'the', 'Cat', ':', "'we're", 'all', 'mad', 'here', '.', "I'm", 'mad', '.', "You're", 'mad', '.',
 'How', 'do', 'you', 'know', "I'm", 'mad', '?', 'said', 'Alice', '.', 'You', 'must', 'be', ',', 'said', 'the', 'Cat', ',', 'or', 'you',
 "wouldn't", 'have', 'come', 'here', '.']
+
+
+def draw_word_senses(sense_vectors, context_vectors):
+    """ Utility function that draws sense-vectors as o in different
+    colours and context vectors as black x.
+    """
+
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+
+    col = cm.rainbow(linspace(0, 1, cluster_num))
+    plt.figure()
+    plt.scatter(sense_vectors[:, 0], sense_vectors[:, 1], marker='o', c=col, s=100)
+    plt.scatter(context_vectors[:, 0], context_vectors[:, 1], marker='x', c='black')
+    plt.show()
 
 
 def cleanse_corpus(corpus):
@@ -128,5 +142,6 @@ def train_sec_order(corpus):
         centroids, _ = kmeans2(context_matrix, cluster_num)
         sense_vectors[word] = centroids
 
+        draw_word_senses(centroids, context_matrix)
 
 train_sec_order(test_corpus)
