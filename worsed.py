@@ -1,10 +1,10 @@
-import pdb
 import string
 from collections import Counter
 from nltk.corpus import stopwords
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
-from numpy import array, zeros, vstack, linspace
+from numpy import array, zeros, vstack, linspace, diag, dot
+from numpy.linalg import svd
 from scipy.cluster.vq import kmeans2
 
 # TODO: lemmatization?
@@ -103,6 +103,25 @@ def context_vector_from_context(context, word_vectors):
             centroid += array(word_vectors[word])
 
     return centroid
+
+
+def svd_reduced(matrix, dim):
+    """ Takes a matrix of size N x M and
+    returns the best approximation of dimension
+    N x dim (in a least square sense).
+    """
+
+    if matrix.shape[0] < matrix.shape[1]:
+        raise ValueError("Matrix has more columns (dimensions) than rows (feature vectors).")
+    if len(matrix[0]) < dim:
+        raise ValueError('Reduction to more dimensions than contained in matrix not possible.')
+
+    U, s, V = svd(matrix, True)
+
+    # reduce dimensionality
+    S = zeros((len(U), dim), float)
+    S[:dim, :dim] = diag(s)[:dim, :dim]
+    return dot(U, dot(S, V[:dim, :dim]))
 
 
 def train_sec_order(corpus):
