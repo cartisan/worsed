@@ -7,13 +7,14 @@ from numpy import array, zeros, vstack, linspace, diag, dot
 from numpy import sum as npsum
 from numpy.linalg import svd
 from scipy.cluster.vq import kmeans2
+from scipy.spatial.distance import cosine
 
 # TODO: lemmatization?
 # TODO: normalization of word-vectors in context-vector creation?
 
 # constants
-dim_num = 2  # number of dimensions of word space
 feat_num = 7  # number of words to build word-vectors for
+dim_num = 2  # number of dimensions of word space
 svd_dim_num = 2  # number of dimensions in svd-space
 window_radius = 3  # how many words to include on each side of occurance
 cluster_num = 2
@@ -145,6 +146,16 @@ def svd_reduced_original(matrix, dim):
     return dot(U, dot(S, V[:dim, :dim]))
 
 
+def assign_sense(context_vector, sense_vectors):
+    " Returns the index of the sense vector most similar to context_vector."
+
+    cos_similarities = []
+    for sense in sense_vectors:
+        cos_similarities.append(cosine(context_vector, sense))
+
+    return cos_similarities.index(min(cos_similarities))
+
+
 def train_sec_order(corpus, ambigous_words):
     # containers
     word_vectors = {}  # maps feature-words to lists containing their vectors
@@ -201,9 +212,23 @@ def train_sec_order(corpus, ambigous_words):
     return sense_vectors, word_vectors
 
 
-def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors):
-    pass
+def test_sec_order(corpus, ambiguous_word, sense_vectors, word_vectors):
+    # remove stop words and signs
+    filtered = cleanse_corpus(corpus)
 
+    # get word positions in text
+    offset_index = ConcordanceIndex(filtered, key=lambda s: s.lower())
+    offsets = offset_index.offsets(ambiguous_word)
+
+    # find all contexts for the word and assign them to a sense
+    context_labels = []
+    for offset in offsets:
+        context = sized_context(offset, window_radius, filtered)
+        context_vector = (context_vector_from_context(context, word_vectors))
+        label = assign_sense(context_vector, sense_vectors)
+        context_labels.append(label)
+
+    return context_labels
 
 senses, words = train_sec_order(train_corpus, ambiguous_words)
-labels = test_sec_order(test_corpus, ambiguous_words, senses, words)
+labels = test_sec_order(test_corpus, ambiguous_words[0], senses[ambiguous_words[0]], words)
