@@ -11,22 +11,21 @@ from scipy.cluster.vq import kmeans2
 # TODO: normalization of word-vectors in context-vector creation?
 
 # constants
-dim_num = 2
-feat_num = 7
+dim_num = 3  # number of dimensions of word space
+feat_num = 7  # number of words to build word-vectors for
+svd_dim_num = 2  # number of dimensions in svd-space
 window_radius = 3  # how many words to include at each side of occurance
 cluster_num = 2
-ambigous_words = ['mad']
-
-# containers
-word_vectors = {}  # maps from feature-words to lists containing their vectors
-context_vectors = {}  # maps from ambiguous words to lists of context vectors
-sense_vectors = {}  # maps from ambiguous words to ndarray of sense vectors
+ambiguous_words = ['mad']
 
 
-test_corpus = ['"', 'But', 'I', "don't", 'want', 'to', 'go', 'among', 'mad', 'people', ',', '"', 'Alice', 'remarked', '.', 'Oh', ',',
+
+train_corpus = ['"', 'But', 'I', "don't", 'want', 'to', 'go', 'among', 'mad', 'people', ',', '"', 'Alice', 'remarked', '.', 'Oh', ',',
 'you', "can't", 'help', 'that', ',', 'said', 'the', 'Cat', ':', "'we're", 'all', 'mad', 'here', '.', "I'm", 'mad', '.', "You're", 'mad', '.',
 'How', 'do', 'you', 'know', "I'm", 'mad', '?', 'said', 'Alice', '.', 'You', 'must', 'be', ',', 'said', 'the', 'Cat', ',', 'or', 'you',
 "wouldn't", 'have', 'come', 'here', '.']
+
+test_corpus = train_corpus
 
 
 def draw_word_senses(sense_vectors, context_vectors):
@@ -36,6 +35,11 @@ def draw_word_senses(sense_vectors, context_vectors):
 
     import matplotlib.pyplot as plt
     import matplotlib.cm as cm
+
+    if len(sense_vectors[0]) > 2:
+        sense_vectors = svd_reduced_original(sense_vectors, 2)
+    if len(context_vectors[0]) > 2:
+        context_vectors = svd_reduced_original(context_vectors, 2)
 
     col = cm.rainbow(linspace(0, 1, cluster_num))
     plt.figure()
@@ -105,16 +109,25 @@ def context_vector_from_context(context, word_vectors):
     return centroid
 
 
-def svd_reduced(matrix, dim):
-    """ Takes a matrix of size N x M and
-    returns the best approximation of dimension
-    N x dim (in a least square sense).
+def svd_reduced_eigenvectors(matrix, dim):
+    """ Takes a matrix of size N x M and returns it's
+    left eigenvector reduced to dim dimensions.
     """
 
     if matrix.shape[0] < matrix.shape[1]:
         raise ValueError("Matrix has more columns (dimensions) than rows (feature vectors).")
     if len(matrix[0]) < dim:
         raise ValueError('Reduction to more dimensions than contained in matrix not possible.')
+
+    U, _, _ = svd(matrix, True)
+    return U[:, :dim]
+
+
+def svd_reduced_original(matrix, dim):
+    """ Takes a matrix of size N x M and
+    returns the best approximation of dimension
+    N x dim (in a least square sense).
+    """
 
     U, s, V = svd(matrix, True)
 
@@ -124,7 +137,11 @@ def svd_reduced(matrix, dim):
     return dot(U, dot(S, V[:dim, :dim]))
 
 
-def train_sec_order(corpus):
+def train_sec_order(corpus, ambigous_words):
+    # containers
+    word_vectors = {}  # maps feature-words to lists containing their vectors
+    sense_vectors = {}  # maps ambiguous words to ndarray of sense vectors
+
     # remove stop words and signs
     filtered = cleanse_corpus(corpus)
 
@@ -154,13 +171,23 @@ def train_sec_order(corpus):
         for offset in offsets:
             context = sized_context(offset, window_radius, filtered)
             vectors.append(context_vector_from_context(context, word_vectors))
-        context_vectors[word] = vectors
+
+        # perform svd and dimension reduction
+        context_matrix = vstack(vectors)
+        svd_matrix = svd_reduced_eigenvectors(context_matrix, svd_dim_num)
 
         # create sense vectors for ambigous context vectors
-        context_matrix = vstack(vectors)
-        centroids, _ = kmeans2(context_matrix, cluster_num)
+        centroids, labels = kmeans2(svd_matrix, cluster_num)
         sense_vectors[word] = centroids
 
-        draw_word_senses(centroids, context_matrix)
+        #draw_word_senses(centroids, svd_matrix)
 
-train_sec_order(test_corpus)
+    return sense_vectors, word_vectors
+
+
+def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors):
+    pass
+
+
+senses, words = train_sec_order(train_corpus, ambiguous_words)
+labels = test_sec_order(test_corpus, ambiguous_words, senses, words)
