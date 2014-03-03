@@ -4,6 +4,7 @@ from nltk.corpus import stopwords
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
 from numpy import array, zeros, vstack, linspace, diag, dot
+from numpy import sum as npsum
 from numpy.linalg import svd
 from scipy.cluster.vq import kmeans2
 
@@ -11,10 +12,10 @@ from scipy.cluster.vq import kmeans2
 # TODO: normalization of word-vectors in context-vector creation?
 
 # constants
-dim_num = 3  # number of dimensions of word space
+dim_num = 2  # number of dimensions of word space
 feat_num = 7  # number of words to build word-vectors for
 svd_dim_num = 2  # number of dimensions in svd-space
-window_radius = 3  # how many words to include at each side of occurance
+window_radius = 3  # how many words to include on each side of occurance
 cluster_num = 2
 ambiguous_words = ['mad']
 
@@ -28,7 +29,7 @@ train_corpus = ['"', 'But', 'I', "don't", 'want', 'to', 'go', 'among', 'mad', 'p
 test_corpus = train_corpus
 
 
-def draw_word_senses(sense_vectors, context_vectors):
+def draw_word_senses(sense_vectors, context_vectors, labels):
     """ Utility function that draws sense-vectors as o in different
     colours and context vectors as black x.
     """
@@ -43,8 +44,15 @@ def draw_word_senses(sense_vectors, context_vectors):
 
     col = cm.rainbow(linspace(0, 1, cluster_num))
     plt.figure()
+
     plt.scatter(sense_vectors[:, 0], sense_vectors[:, 1], marker='o', c=col, s=100)
-    plt.scatter(context_vectors[:, 0], context_vectors[:, 1], marker='x', c='black')
+
+    for i in range(len(sense_vectors)):
+        cluster_i = [vector for vector, label in\
+                     zip(context_vectors, labels) if label == i]
+        for x,y in cluster_i:
+            plt.plot(x,y, marker='x', color=col[i])
+
     plt.show()
 
 
@@ -177,10 +185,18 @@ def train_sec_order(corpus, ambigous_words):
         svd_matrix = svd_reduced_eigenvectors(context_matrix, svd_dim_num)
 
         # create sense vectors for ambigous context vectors
-        centroids, labels = kmeans2(svd_matrix, cluster_num)
+        svd_centroids, labels = kmeans2(svd_matrix, cluster_num)
+
+        centroids = []
+        for i in range(cluster_num):
+            cluster_i = [vector for vector, label in\
+                         zip(vectors, labels) if label == i]
+            centroids.append(npsum(vstack(cluster_i), 0))
+
         sense_vectors[word] = centroids
 
-        #draw_word_senses(centroids, svd_matrix)
+        #draw_word_senses(svd_centroids, svd_matrix, labels)
+        #draw_word_senses(vstack(centroids), context_matrix, labels)
 
     return sense_vectors, word_vectors
 
