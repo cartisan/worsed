@@ -212,23 +212,28 @@ def train_sec_order(corpus, ambigous_words):
     return sense_vectors, word_vectors
 
 
-def test_sec_order(corpus, ambiguous_word, sense_vectors, word_vectors):
+def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors):
     # remove stop words and signs
     filtered = cleanse_corpus(corpus)
 
     # get word positions in text
     offset_index = ConcordanceIndex(filtered, key=lambda s: s.lower())
-    offsets = offset_index.offsets(ambiguous_word)
 
-    # find all contexts for the word and assign them to a sense
-    context_labels = []
-    for offset in offsets:
-        context = sized_context(offset, window_radius, filtered)
-        context_vector = (context_vector_from_context(context, word_vectors))
-        label = assign_sense(context_vector, sense_vectors)
-        context_labels.append(label)
+    word_context_labels = {}
+    for ambiguous_word in ambiguous_words:
+        offsets = offset_index.offsets(ambiguous_word)
 
-    return context_labels
+        # find all contexts for the word and assign them to a sense
+        context_labels = []
+        for offset in offsets:
+            context = sized_context(offset, window_radius, filtered)
+            context_vector = context_vector_from_context(context, word_vectors)
+            label = assign_sense(context_vector, sense_vectors[ambiguous_word])
+            context_labels.append(label)
+
+        word_context_labels[ambiguous_word] = context_labels
+
+    return word_context_labels
 
 senses, words = train_sec_order(train_corpus, ambiguous_words)
-labels = test_sec_order(test_corpus, ambiguous_words[0], senses[ambiguous_words[0]], words)
+labels = test_sec_order(test_corpus, ambiguous_words, senses, words)
