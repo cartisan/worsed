@@ -2,6 +2,7 @@ from nltk.corpus import senseval as seval
 from random import sample
 import logging
 
+from util import cleanse_corpus_pos_aware
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s | %(message)s')
 
@@ -49,8 +50,10 @@ def split_corpus():
     sample_num = 100
 
     train_p, test_p = 0.8, 0.2
-    train, test = [], {'hard': [], 'line': [], 'serve': []}
+    train = []
+    test = {'hard': [], 'line': [], 'serve': []}
     labels = {'hard': [], 'line': [], 'serve': []}
+    offsets = {'hard': [], 'line': [], 'serve': []}
     corpora = [hard, line, serve]
     samples = sample(range(sample_range), sample_num)  # random order for sentences
     border = int(sample_num * train_p)
@@ -65,16 +68,46 @@ def split_corpus():
 
     logging.info("  test samples start")
 
+    lengths = {'hard': 0, 'line': 0, 'serve': 0}
     for i in samples[border:]:
         for corp in corpora:
             inst = corp[i]
             word = inst.word.split('-')[0]
-            test[word] += [w[0] for w in inst.context if isinstance(w, tuple)]
+
+            # corpus.context somtimes contains non-tuple entries:
+            new_sentence_dirty = []
+            for w in inst.context:
+                if isinstance(w, tuple):
+                    new_sentence_dirty.append(w[0])
+                else:
+                    new_sentence_dirty.append(w)
+
+            # need to perform cleansing here and not in worsed for offsets to
+            # be aligned
+            new_sentence, new_pos = cleanse_corpus_pos_aware(new_sentence_dirty,
+                                                             inst.position)
+            # TODO: Update inst.position after cleansing
+
+            logging.debug(new_sentence)
+            logging.debug("len_sent: {}".format(len(new_sentence)))
+            logging.debug("Len_all: {}".format(lengths[word]))
+            logging.debug("Position: {}".format(inst.position))
+            logging.debug("-------")
+
+            test[word] += new_sentence
             labels[word] += inst.senses
+            offsets[word].append(new_pos + lengths[word])
+            lengths[word] += len(new_sentence)
+            logging.debug(offsets[word])
+            logging.debug(lengths[word])
+            logging.debug("-----------------")
 
     logging.info("end corpus")
     logging.info("length train: {}, length test: {}, labels/word: {}".
                  format(len(train), len(test['hard']) + len(test['line'])
                  + len(test['serve']), len(labels['hard'])))
 
-    return train, test, labels
+    print offsets
+    return train, test, labels, lengths
+
+train_corpus, test_corpus, correct_labels, offsets = split_corpus()

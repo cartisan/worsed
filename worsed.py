@@ -1,7 +1,5 @@
 import logging
-import string
 from collections import Counter
-from nltk.corpus import stopwords
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
 from nltk.stem.porter import PorterStemmer
@@ -12,6 +10,7 @@ from scipy.cluster.vq import kmeans2
 from scipy.spatial.distance import cosine
 
 from senseval_adapter import split_corpus
+from util import cleanse_corpus
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s | %(message)s')
@@ -63,16 +62,6 @@ def draw_word_senses(sense_vectors, context_vectors, labels):
     plt.show()
 
 
-def cleanse_corpus(corpus):
-    """ Returns lowercased and stemmed copy of list with removed stop words
-    and punctuation marks.
-    """
-
-    stemmer = PorterStemmer()
-    return [stemmer.stem(word.lower()) for word in corpus if
-            word.lower() not in stopwords.words('english') and
-            word not in string.punctuation and
-            len(word) > 2]
 
 
 def sized_context(word_index, window_radius, corpus):
@@ -236,24 +225,24 @@ def train_sec_order(corpus, ambigous_words):
     return sense_vectors, word_vectors
 
 
-def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors):
+def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors, all_offsets):
     logging.info("Start test second order co-occurence")
     stemmer = PorterStemmer()
     word_context_labels = {}
 
     for ambiguous_word in ambiguous_words:
         logging.info("   test for: {}".format(ambiguous_word))
-        # remove stop words and signs
-        filtered = cleanse_corpus(corpus[ambiguous_word])
 
-        # get word positions in text
-        offset_index = ConcordanceIndex(filtered, key=lambda s: s.lower())
+        # no need to cleanse, done in split_corpus already
+        # filtered = cleanse_corpus(corpus[ambiguous_word])
+        filtered = corpus[ambiguous_word]
 
-        offsets = offset_index.offsets(stemmer.stem(ambiguous_word))
+        offsets = all_offsets[ambiguous_word]
 
         # find all contexts for the word and assign them to a sense
         context_labels = []
         for offset in offsets:
+            assert filtered[offset] == stemmer.stem(ambiguous_word)
             context = sized_context(offset, window_radius, filtered)
             context_vector = context_vector_from_context(context, word_vectors)
             label = assign_sense(context_vector, sense_vectors[ambiguous_word])
@@ -270,10 +259,10 @@ def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors):
     logging.info("end test")
     return word_context_labels
 
-train_corpus, test_corpus, correct_labels = split_corpus()
+train_corpus, test_corpus, correct_labels, offsets = split_corpus()
 
 senses, words = train_sec_order(train_corpus, ambiguous_words)
-labels = test_sec_order(test_corpus, ambiguous_words, senses, words)
+labels = test_sec_order(test_corpus, ambiguous_words, senses, words, offsets)
 
 print 'labels ', labels
 print 'correct labels ', correct_labels
