@@ -155,6 +155,48 @@ def assign_sense(context_vector, sense_vectors):
     return cos_similarities.index(min(cos_similarities))
 
 
+def compute_precision(computed, correct):
+    logging.info("calculating precison")
+    for word, labels in computed.items():
+        translater_comp_corr = {}  # maps from cluster num to sense label
+        translater_corr_comp = {}  # maps from sense label to cluster num
+        hit = 0
+        size = 0
+
+        corr_labels = correct[word]
+        for comp, corr in zip(labels, corr_labels):
+            baseline = Counter(corr_labels).most_common()[0][1]  # count of most common
+
+            size += 1
+            if not comp in translater_comp_corr and\
+                    not corr in translater_corr_comp:
+                # first encounter of noth labels, assign them to each
+                # other, its a hit by definition
+                translater_comp_corr[comp] = corr
+                translater_corr_comp[corr] = comp
+                hit += 1
+
+            elif not comp in translater_comp_corr and\
+                    corr in translater_corr_comp:
+                # first encounter of computed label, but correct
+                # label is assigned to another compted label -->
+                # thats a wrong classification
+                pass
+
+            elif comp in translater_comp_corr and\
+                    corr in translater_corr_comp:
+                # know both labels, check if they match
+                if translater_comp_corr[comp] == corr:
+                    hit += 1
+
+        logging.info("{}-translater: {}".format(word, translater_comp_corr))
+        print "{}: {}/{} correct, {}/{} baseline".format(word,
+                                                         hit,
+                                                         size,
+                                                         baseline,
+                                                         size)
+
+
 def train_sec_order(corpus, ambigous_words):
     logging.info("Start train second order co-occurence")
     stemmer = PorterStemmer()
@@ -269,3 +311,5 @@ labels = test_sec_order(test_corpus, ambiguous_words, senses, words, offsets)
 
 print 'labels ', labels
 print 'correct labels ', correct_labels
+
+compute_precision(labels, correct_labels)
