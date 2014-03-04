@@ -88,26 +88,18 @@ def split_corpus():
                                                              inst.position)
             # TODO: Update inst.position after cleansing
 
-            logging.debug(new_sentence)
-            logging.debug("len_sent: {}".format(len(new_sentence)))
-            logging.debug("Len_all: {}".format(lengths[word]))
-            logging.debug("Position: {}".format(inst.position))
-            logging.debug("-------")
-
             test[word] += new_sentence
             labels[word] += inst.senses
             offsets[word].append(new_pos + lengths[word])
             lengths[word] += len(new_sentence)
-            logging.debug(offsets[word])
-            logging.debug(lengths[word])
-            logging.debug("-----------------")
 
     logging.info("end corpus")
     logging.info("length train: {}, length test: {}, labels/word: {}".
                  format(len(train), len(test['hard']) + len(test['line'])
                  + len(test['serve']), len(labels['hard'])))
 
+    print "senseval offsets:"
     print offsets
-    return train, test, labels, lengths
+    return train, test, labels, offsets
 
-train_corpus, test_corpus, correct_labels, offsets = split_corpus()
+#train_corpus, test_corpus, correct_labels, offsets = split_corpus()
