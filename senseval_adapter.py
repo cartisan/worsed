@@ -34,14 +34,14 @@ def sense_anal(word):
 def split_corpus():
 
     logging.info("start corpus")
-    logging.info("restriction starts")
+    logging.info("  restriction starts")
 
     # restrict corpora to 2 most common senses
     hard = seval.instances("hard.pos")[0:3957]
     line = seval.instances("line.pos")[1096:3742]
     serve = seval.instances("serve.pos")[0:3086]
 
-    logging.info("value setting starts")
+    logging.info("  value setting starts")
 
     # smallest corpus has 2646 entries, for simplicity we restrict the
     # num of samples in all corpora to that
@@ -55,7 +55,7 @@ def split_corpus():
     samples = sample(range(sample_range), sample_num)  # random order for sentences
     border = int(sample_num * train_p)
 
-    logging.info("training samples start")
+    logging.info("  training samples start")
 
     # ambiguous words alterning to prevent skew
     for i in samples[:border]:
@@ -63,7 +63,7 @@ def split_corpus():
             inst = corp[i]
             train += [w[0] for w in inst.context if isinstance(w, tuple)]
 
-    logging.info("test samples start")
+    logging.info("  test samples start")
 
     for i in samples[border:]:
         for corp in corpora:
