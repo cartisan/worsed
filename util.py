@@ -10,13 +10,24 @@ def _word_acceptable(word):
             len(word) > 2)
 
 
+def cleanse_word(word):
+    stemmer = PorterStemmer()
+    clean = stemmer.stem(word.lower())
+
+    # no stemmer stems superlatives but corpus considers harder instances
+    # as occurences of hard
+    if clean == "harder" or clean == "hardest":
+        clean = "hard"
+
+    return clean
+
+
 def cleanse_corpus(corpus):
     """ Returns lowercased and stemmed copy of list with removed stop words
     and punctuation marks.
     """
 
-    stemmer = PorterStemmer()
-    return [stemmer.stem(word.lower()) for word in corpus if
+    return [cleanse_word(word) for word in corpus if
             word.lower() not in stopwords.words('english') and
             word not in string.punctuation and
             len(word) > 2]
@@ -27,17 +38,16 @@ def cleanse_corpus_pos_aware(corpus, old_pos):
     and punctuation marks.
     """
 
-    stemmer = PorterStemmer()
     new_corpus = []
     new_pos = -1
 
     for i, word in enumerate(corpus):
         if(_word_acceptable(word)):
             if i != old_pos:
-                new_corpus.append(stemmer.stem(word.lower()))
+                new_corpus.append(cleanse_word(word))
             else:
                 # mark word at position by making it upper case
-                new_corpus.append(stemmer.stem(word.lower()).upper())
+                new_corpus.append(cleanse_word(word).upper())
 
     # find marked word, save it's position and unmark it
     for i, word in enumerate(new_corpus):

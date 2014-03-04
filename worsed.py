@@ -242,7 +242,10 @@ def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors, all_off
         # find all contexts for the word and assign them to a sense
         context_labels = []
         for offset in offsets:
-            assert filtered[offset] == stemmer.stem(ambiguous_word)
+            if filtered[offset] != stemmer.stem(ambiguous_word):
+                raise ValueError("Word at offset {} is {}: not an ambiguous word".
+                                 format(offset, filtered[offset]))
+
             context = sized_context(offset, window_radius, filtered)
             context_vector = context_vector_from_context(context, word_vectors)
             label = assign_sense(context_vector, sense_vectors[ambiguous_word])

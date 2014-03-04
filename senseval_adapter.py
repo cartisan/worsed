@@ -94,12 +94,13 @@ def split_corpus():
             lengths[word] += len(new_sentence)
 
     logging.info("end corpus")
-    logging.info("length train: {}, length test: {}, labels/word: {}".
+    logging.info("length train: {}, length test: {}".
                  format(len(train), len(test['hard']) + len(test['line'])
-                 + len(test['serve']), len(labels['hard'])))
+                 + len(test['serve'])))
+    logging.info("labels(h/l/s): {}/{}/{}".
+                 format(
+                     len(labels['hard']),
+                     len(labels['line']),
+                     len(labels['serve'])))
 
-    print "senseval offsets:"
-    print offsets
     return train, test, labels, offsets
-
-#train_corpus, test_corpus, correct_labels, offsets = split_corpus()
