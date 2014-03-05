@@ -19,10 +19,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s')
 # TODO: normalization of word-vectors in context-vector creation?
 
 # constants
-feat_num = 50  # number of words to build word-vectors for
-dim_num = 25  # number of dimensions of word space  ...7 -> ok | 8 -> crash
-svd_dim_num = 12  # number of dimensions in svd-space
-window_radius = 15  # how many words to include on each side of occurance
+feat_num = 4000  # number of words to build word-vectors for
+dim_num = 400  # number of dimensions of word space  ...7 -> ok | 8 -> crash
+svd_dim_num = 100  # number of dimensions in svd-space
+window_radius = 25  # how many words to include on each side of occurance
 cluster_num = 2
 ambiguous_words = ['hard', 'line', 'serve']
 
@@ -55,10 +55,10 @@ def draw_word_senses(sense_vectors, context_vectors, labels):
     plt.scatter(sense_vectors[:, 0], sense_vectors[:, 1], marker='o', c=col, s=100)
 
     for i in range(len(sense_vectors)):
-        cluster_i = [vector for vector, label in\
+        cluster_i = [vector for vector, label in
                      zip(context_vectors, labels) if label == i]
-        for x,y in cluster_i:
-            plt.plot(x,y, marker='x', color=col[i])
+        for x, y in cluster_i:
+            plt.plot(x, y, marker='x', color=col[i])
 
     plt.show()
 
@@ -156,6 +156,7 @@ def assign_sense(context_vector, sense_vectors):
     for sense in sense_vectors:
         if norm(sense) == 0:
             continue
+
         cos_similarities.append(cosine(context_vector, sense))
 
     return cos_similarities.index(min(cos_similarities))
@@ -214,6 +215,8 @@ def train_sec_order(corpus, ambigous_words):
     # remove stop words and signs
     logging.info("  Start stemming and cleansing corpus")
     filtered = cleanse_corpus(corpus)
+    logging.info("  {} different words after cleansing".format(
+                 len(set(filtered))))
 
     # find dimensions and features
     logging.info("  Start finding features and dimensions")
@@ -267,7 +270,7 @@ def train_sec_order(corpus, ambigous_words):
             try:
                 centroids.append(npsum(vstack(cluster_i), 0))
             except ValueError:
-                logging.warning("Empty sense vector")
+                logging.warning("CRITICAL: Empty sense vector")
                 centroids.append(zeros(dim_num))
 
         sense_vectors[word] = centroids
@@ -275,10 +278,10 @@ def train_sec_order(corpus, ambigous_words):
         #draw_word_senses(svd_centroids, svd_matrix, labels)
         #draw_word_senses(vstack(centroids), context_matrix, labels)
 
-    logging.info("  sense vectors:{}, example:{}".format(
-        len(sense_vectors['line']), sense_vectors['line'][0]))
-    logging.info("  word vectors: {}, example:{}".format(
-        len(word_vectors.items()), word_vectors.items()[0]))
+    logging.info("  sense vectors:{}".format(
+        len(sense_vectors['line'])))
+    logging.info("  word vectors: {}".format(
+        len(word_vectors.items())))
     logging.info("end train")
     return sense_vectors, word_vectors
 
@@ -289,7 +292,7 @@ def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors, all_off
     word_context_labels = {}
 
     for ambiguous_word in ambiguous_words:
-        logging.info("   test for: {}".format(ambiguous_word))
+        logging.info("  test for: {}".format(ambiguous_word))
 
         # no need to cleanse, done in split_corpus already
         # filtered = cleanse_corpus(corpus[ambiguous_word])
@@ -306,9 +309,15 @@ def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors, all_off
 
             context = sized_context(offset, window_radius, filtered)
             context_vector = context_vector_from_context(context, word_vectors)
+
+            if norm(context_vector) == 0:
+                logging.info("BAD: context with not a single feature found")
+                continue
+
             label = assign_sense(context_vector, sense_vectors[ambiguous_word])
             context_labels.append(label)
 
+        logging.info("  Label counts: {}".format(Counter(context_labels).most_common()))
         word_context_labels[ambiguous_word] = context_labels
 
     logging.info("labels(h/l/s): {}/{}/{}".
@@ -327,5 +336,6 @@ labels = test_sec_order(test_corpus, ambiguous_words, senses, words, offsets)
 
 #print 'labels ', labels
 #print 'correct labels ', correct_labels
+
 
 compute_precision(labels, correct_labels)

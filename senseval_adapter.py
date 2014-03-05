@@ -39,17 +39,18 @@ def split_corpus():
     logging.info("  restriction starts")
 
     # restrict corpora to 2 most common senses
-    hard = seval.instances("hard.pos")[0:2500]
+    hard = seval.instances("hard.pos")[0:600]
     hard += seval.instances("hard.pos")[3455:3957]
-    line = seval.instances("line.pos")[1096:3742]
+    line = seval.instances("line.pos")[1096:2200]
     serve = seval.instances("serve.pos")[0:3086]
 
     logging.info("  value setting starts")
 
     # smallest corpus has 2646 entries, for simplicity we restrict the
     # num of samples in all corpora to that
-    sample_range = 2646
-    sample_num = 2646
+    #sample_range = 2646
+    sample_range = 1100
+    sample_num = 1100
 
     train_p, test_p = 0.8, 0.2
     train = []
