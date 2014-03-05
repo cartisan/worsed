@@ -43,7 +43,7 @@ def split_corpus():
     hard += seval.instances("hard.pos")[3455:3957]
     line = seval.instances("line.pos")[1096:2200]
     serve = seval.instances("serve.pos")[0:600]
-    serve = seval.instances("serve.pos")[2486:3086]
+    serve += seval.instances("serve.pos")[2486:3086]
 
     logging.info("  value setting starts")
 
