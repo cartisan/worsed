@@ -42,7 +42,8 @@ def split_corpus():
     hard = seval.instances("hard.pos")[0:600]
     hard += seval.instances("hard.pos")[3455:3957]
     line = seval.instances("line.pos")[1096:2200]
-    serve = seval.instances("serve.pos")[0:3086]
+    serve = seval.instances("serve.pos")[0:600]
+    serve = seval.instances("serve.pos")[2486:3086]
 
     logging.info("  value setting starts")
 
@@ -89,8 +90,6 @@ def split_corpus():
             # be aligned
             new_sentence, new_pos = cleanse_corpus_pos_aware(new_sentence_dirty,
                                                              inst.position)
-            # TODO: Update inst.position after cleansing
-
             test[word] += new_sentence
             labels[word] += inst.senses
             offsets[word].append(new_pos + lengths[word])
