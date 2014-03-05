@@ -5,7 +5,8 @@ from nltk import ConcordanceIndex
 from nltk.stem.porter import PorterStemmer
 from numpy import array, zeros, vstack, linspace, diag, dot
 from numpy import sum as npsum
-from numpy.linalg import svd, norm
+from numpy.linalg import norm
+from scipy.linalg import svd
 from scipy.cluster.vq import kmeans2
 from scipy.spatial.distance import cosine
 
@@ -13,15 +14,15 @@ from senseval_adapter import split_corpus
 from util import cleanse_corpus
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s | %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s')
 
 # TODO: normalization of word-vectors in context-vector creation?
 
 # constants
-feat_num = 7  # number of words to build word-vectors for
-dim_num = 2  # number of dimensions of word space
-svd_dim_num = 2  # number of dimensions in svd-space
-window_radius = 3  # how many words to include on each side of occurance
+feat_num = 50  # number of words to build word-vectors for
+dim_num = 25  # number of dimensions of word space  ...7 -> ok | 8 -> crash
+svd_dim_num = 12  # number of dimensions in svd-space
+window_radius = 15  # how many words to include on each side of occurance
 cluster_num = 2
 ambiguous_words = ['hard', 'line', 'serve']
 
@@ -125,7 +126,12 @@ def svd_reduced_eigenvectors(matrix, dim):
 #    if len(matrix[0]) < dim:
 #        raise ValueError('Reduction to more dimensions than contained in matrix not possible.')
 
+    logging.debug("      {}x{} matrix, {} dimensions".format(len(matrix),
+                                                             len(matrix[0]),
+                                                             dim))
     U, _, _ = svd(matrix, True)
+    logging.debug("      svd computed U: {}x{}".format(len(matrix),
+                                                       len(matrix[0])))
     return U[:, :dim]
 
 
@@ -206,14 +212,17 @@ def train_sec_order(corpus, ambigous_words):
     sense_vectors = {}  # maps ambiguous words to ndarray of sense vectors
 
     # remove stop words and signs
+    logging.info("  Start stemming and cleansing corpus")
     filtered = cleanse_corpus(corpus)
 
     # find dimensions and features
+    logging.info("  Start finding features and dimensions")
     words_desc = FreqDist(filtered).keys()
     dimensions = words_desc[:dim_num]
     features = words_desc[:feat_num]
 
     # create word vectors for features
+    logging.info("  Start creating word vectors")
     offset_index = ConcordanceIndex(filtered, key=lambda s: s.lower())
     for word in features:
         context = []
@@ -228,7 +237,9 @@ def train_sec_order(corpus, ambigous_words):
         word_vectors[word] = word_vector
 
     for word in ambigous_words:
+        logging.info("  Start train: {}".format(word))
         # create context vectors for ambigous words
+        logging.info("    Start creating sense vectors")
         vectors = []
         offsets = offset_index.offsets(stemmer.stem(word))
         for offset in offsets:
@@ -236,16 +247,19 @@ def train_sec_order(corpus, ambigous_words):
             vectors.append(context_vector_from_context(context, word_vectors))
 
         # perform svd and dimension reduction
+        logging.info("    Start svd reduction")
         context_matrix = vstack(vectors)
         svd_matrix = svd_reduced_eigenvectors(context_matrix, svd_dim_num)
 
         # create sense vectors for ambigous context vectors
+        logging.info("    Start clustering")
         svd_centroids, labels = kmeans2(svd_matrix, cluster_num)
 
         #draw_word_senses(svd_centroids, svd_matrix, labels)
 
         # labels tell which context belongs to which cluster in svd
         # space. Compute centroids in word space according to that
+        logging.info("    Start centroid computation")
         centroids = []
         for i in range(cluster_num):
             cluster_i = [vector for vector, label in\
@@ -261,8 +275,10 @@ def train_sec_order(corpus, ambigous_words):
         #draw_word_senses(svd_centroids, svd_matrix, labels)
         #draw_word_senses(vstack(centroids), context_matrix, labels)
 
-    logging.info("  sense vectors:{}".format(sense_vectors))
-    logging.info("  word vectors: {}".format(word_vectors.items()))
+    logging.info("  sense vectors:{}, example:{}".format(
+        len(sense_vectors['line']), sense_vectors['line'][0]))
+    logging.info("  word vectors: {}, example:{}".format(
+        len(word_vectors.items()), word_vectors.items()[0]))
     logging.info("end train")
     return sense_vectors, word_vectors
 
@@ -309,7 +325,7 @@ train_corpus, test_corpus, correct_labels, offsets = split_corpus()
 senses, words = train_sec_order(train_corpus, ambiguous_words)
 labels = test_sec_order(test_corpus, ambiguous_words, senses, words, offsets)
 
-print 'labels ', labels
-print 'correct labels ', correct_labels
+#print 'labels ', labels
+#print 'correct labels ', correct_labels
 
 compute_precision(labels, correct_labels)

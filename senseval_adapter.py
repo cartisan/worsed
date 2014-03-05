@@ -24,6 +24,7 @@ def sense_anal(word):
 # Using sense_anal we find the following:
 # borders:  [(0, 'HARD1'), (3455, 'HARD2'), (3957, 'HARD3')]
 # h1: 3455, h2: 502 --> 3957  [0:3957]
+# big dispartity --> 3002 [0:2500] + [3455:3957]
 
 # borders:  [(0, 'cord'), (373, 'division'), (747, 'formation'), (1096, 'phone'), (1525, 'product'), (3742, 'text')]
 # phone: 429, product: 2217 --> 2646 [1096:3742]
@@ -38,7 +39,8 @@ def split_corpus():
     logging.info("  restriction starts")
 
     # restrict corpora to 2 most common senses
-    hard = seval.instances("hard.pos")[0:3957]
+    hard = seval.instances("hard.pos")[0:2500]
+    hard += seval.instances("hard.pos")[3455:3957]
     line = seval.instances("line.pos")[1096:3742]
     serve = seval.instances("serve.pos")[0:3086]
 
@@ -47,7 +49,7 @@ def split_corpus():
     # smallest corpus has 2646 entries, for simplicity we restrict the
     # num of samples in all corpora to that
     sample_range = 2646
-    sample_num = 100
+    sample_num = 2646
 
     train_p, test_p = 0.8, 0.2
     train = []
