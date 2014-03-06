@@ -3,24 +3,23 @@ from collections import Counter
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
 from nltk.stem.porter import PorterStemmer
-from numpy import array, zeros, vstack, linspace, diag, dot
+from numpy import array, zeros, vstack, linspace, diag, dot, mean
 from numpy import sum as npsum
 from numpy.linalg import norm
 from scipy.linalg import svd
 from scipy.cluster.vq import kmeans2
 from scipy.spatial.distance import cosine
+from sklearn.cluster import KMeans
 
 from senseval_adapter import split_corpus
-from util import cleanse_corpus
+from cleanser import cleanse_corpus
 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s')
-
-# TODO: normalization of word-vectors in context-vector creation?
+logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s | %(message)s')
 
 # constants
 feat_num = 4000  # number of words to build word-vectors for
-dim_num = 400  # number of dimensions of word space  ...7 -> ok | 8 -> crash
+dim_num = 400  # number of dimensions of word space
 svd_dim_num = 100  # number of dimensions in svd-space
 window_radius = 25  # how many words to include on each side of occurance
 cluster_num = 2
@@ -121,17 +120,7 @@ def svd_reduced_eigenvectors(matrix, dim):
     left eigenvector reduced to dim dimensions.
     """
 
-#    if matrix.shape[0] < matrix.shape[1]:
-#        raise ValueError("Matrix has more columns (dimensions) than rows (feature vectors).")
-#    if len(matrix[0]) < dim:
-#        raise ValueError('Reduction to more dimensions than contained in matrix not possible.')
-
-    logging.debug("      {}x{} matrix, {} dimensions".format(len(matrix),
-                                                             len(matrix[0]),
-                                                             dim))
     U, _, _ = svd(matrix, True)
-    logging.debug("      svd computed U: {}x{}".format(len(matrix),
-                                                       len(matrix[0])))
     return U[:, :dim]
 
 
@@ -164,6 +153,7 @@ def assign_sense(context_vector, sense_vectors):
 
 def compute_precision(computed, correct):
     logging.info("calculating precison")
+    precision = []
     for word, labels in computed.items():
         translater_comp_corr = {}  # maps from cluster num to sense label
         translater_corr_comp = {}  # maps from sense label to cluster num
@@ -196,12 +186,87 @@ def compute_precision(computed, correct):
                 if translater_comp_corr[comp] == corr:
                     hit += 1
 
-        logging.info("{}-translater: {}".format(word, translater_comp_corr))
+        precision.append(float(hit)/size)
+        logging.info("  {}-translater: {}".format(word, translater_comp_corr))
         print "{}: {}/{} correct, {}/{} baseline".format(word,
                                                          hit,
                                                          size,
                                                          baseline,
                                                          size)
+    print "avg-precision: {}".format(mean(precision))
+
+
+def train_fir_order(corpus, ambigous_words):
+    logging.info("Start train first order co-occurence")
+    stemmer = PorterStemmer()
+
+    # containers
+    sense_vectors = {}  # maps ambiguous words to ndarray of sense vectors
+    estimators = {}
+
+    # remove stop words and signs
+    logging.info("  Start stemming and cleansing corpus")
+    filtered = cleanse_corpus(corpus)
+    logging.info("  {} different words after cleansing".format(
+                 len(set(filtered))))
+
+    # find dimensions
+    logging.info("  Start finding dimensions")
+    words_desc = FreqDist(filtered).keys()
+    dimensions = words_desc[:dim_num]
+    offset_index = ConcordanceIndex(filtered, key=lambda s: s.lower())
+
+    for word in ambigous_words:
+        logging.info("  Start train: {}".format(word))
+        estimator = KMeans(cluster_num, "k-means++", n_init=20)
+
+        # create context vectors for ambigous words
+        logging.info("    Start creating sense vectors")
+        vectors = []
+        offsets = offset_index.offsets(stemmer.stem(word))
+        for offset in offsets:
+            context = sized_context(offset, window_radius, filtered)
+            vectors.append(word_vector_from_context(context, dimensions))
+
+        # perform svd and dimension reduction
+        logging.info("    Start svd reduction")
+        context_matrix = vstack(vectors)
+        svd_matrix = svd_reduced_eigenvectors(context_matrix, svd_dim_num)
+
+        # create sense vectors for ambigous context vectors
+        logging.info("    Start clustering")
+
+        # +++++++++ SVD switch here +++++++++++
+        #estimator.fit(context_matrix)
+        estimator.fit(svd_matrix)
+
+        labels = estimator.labels_
+        estimators[word] = estimator
+
+        #draw_word_senses(svd_centroids, svd_matrix, labels)
+
+        # labels tell which context belongs to which cluster in svd
+        # space. Compute centroids in word space according to that
+        logging.info("    Start centroid computation")
+        centroids = []
+        for i in range(cluster_num):
+            cluster_i = [vector for vector, label in\
+                         zip(vectors, labels) if label == i]
+            try:
+                centroids.append(npsum(vstack(cluster_i), 0))
+            except ValueError:
+                logging.warning("CRITICAL: Empty sense vector")
+                centroids.append(zeros(dim_num))
+
+        sense_vectors[word] = centroids
+
+        #draw_word_senses(svd_centroids, svd_matrix, labels)
+        #draw_word_senses(vstack(centroids), context_matrix, labels)
+
+    logging.info("  sense vectors:{}".format(
+        len(sense_vectors['line'])))
+    logging.info("end train")
+    return sense_vectors, dimensions, estimators
 
 
 def train_sec_order(corpus, ambigous_words):
@@ -211,6 +276,7 @@ def train_sec_order(corpus, ambigous_words):
     # containers
     word_vectors = {}  # maps feature-words to lists containing their vectors
     sense_vectors = {}  # maps ambiguous words to ndarray of sense vectors
+    estimators = {}
 
     # remove stop words and signs
     logging.info("  Start stemming and cleansing corpus")
@@ -241,6 +307,8 @@ def train_sec_order(corpus, ambigous_words):
 
     for word in ambigous_words:
         logging.info("  Start train: {}".format(word))
+        estimator = KMeans(cluster_num, "k-means++", n_init=20)
+
         # create context vectors for ambigous words
         logging.info("    Start creating sense vectors")
         vectors = []
@@ -256,7 +324,13 @@ def train_sec_order(corpus, ambigous_words):
 
         # create sense vectors for ambigous context vectors
         logging.info("    Start clustering")
-        svd_centroids, labels = kmeans2(svd_matrix, cluster_num)
+
+        # +++++++++ SVD switch here +++++++++++
+        #estimator.fit(context_matrix)
+        estimator.fit(svd_matrix)
+
+        labels = estimator.labels_
+        estimators[word] = estimator
 
         #draw_word_senses(svd_centroids, svd_matrix, labels)
 
@@ -283,13 +357,14 @@ def train_sec_order(corpus, ambigous_words):
     logging.info("  word vectors: {}".format(
         len(word_vectors.items())))
     logging.info("end train")
-    return sense_vectors, word_vectors
+    return sense_vectors, word_vectors, estimators
 
 
-def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors, all_offsets):
+def test_fir_order(corpus, ambiguous_words, estimators,
+                   all_offsets, dimensions):
     logging.info("Start test second order co-occurence")
     stemmer = PorterStemmer()
-    word_context_labels = {}
+    labels = {}
 
     for ambiguous_word in ambiguous_words:
         logging.info("  test for: {}".format(ambiguous_word))
@@ -301,41 +376,100 @@ def test_sec_order(corpus, ambiguous_words, sense_vectors, word_vectors, all_off
         offsets = all_offsets[ambiguous_word]
 
         # find all contexts for the word and assign them to a sense
-        context_labels = []
+        context_vectors = []
         for offset in offsets:
             if filtered[offset] != stemmer.stem(ambiguous_word):
                 raise ValueError("Word at offset {} is {}: not an ambiguous word".
                                  format(offset, filtered[offset]))
 
             context = sized_context(offset, window_radius, filtered)
-            context_vector = context_vector_from_context(context, word_vectors)
+            context_vectors.append(word_vector_from_context(context,
+                                                            dimensions))
 
-            if norm(context_vector) == 0:
-                logging.info("BAD: context with not a single feature found")
-                continue
+        context_matrix = vstack(context_vectors)
+        svd_matrix = svd_reduced_eigenvectors(context_matrix,
+                                              svd_dim_num)
 
-            label = assign_sense(context_vector, sense_vectors[ambiguous_word])
-            context_labels.append(label)
+        # +++++++++ SVD switch here +++++++++++
+        labels[ambiguous_word] = estimators[ambiguous_word].predict(svd_matrix)
+        #labels[ambiguous_word] = estimators[ambiguous_word].predict(context_matrix))
 
-        logging.info("  Label counts: {}".format(Counter(context_labels).most_common()))
-        word_context_labels[ambiguous_word] = context_labels
-
+    for k, v in labels.items():
+        logging.info("  {} label counts: {}".
+                     format(k, Counter(v).most_common()))
     logging.info("labels(h/l/s): {}/{}/{}".
                  format(
-                     len(word_context_labels['hard']),
-                     len(word_context_labels['line']),
-                     len(word_context_labels['serve'])))
-
+                     len(labels['hard']),
+                     len(labels['line']),
+                     len(labels['serve'])))
     logging.info("end test")
-    return word_context_labels
 
+    return labels
+
+
+def test_sec_order(corpus, ambiguous_words, estimators,
+                   all_offsets, word_vectors):
+    logging.info("Start test second order co-occurence")
+    stemmer = PorterStemmer()
+    labels = {}
+
+    for ambiguous_word in ambiguous_words:
+        logging.info("  test for: {}".format(ambiguous_word))
+
+        # no need to cleanse, done in split_corpus already
+        # filtered = cleanse_corpus(corpus[ambiguous_word])
+        filtered = corpus[ambiguous_word]
+
+        offsets = all_offsets[ambiguous_word]
+
+        # find all contexts for the word and assign them to a sense
+        context_vectors = []
+        for offset in offsets:
+            if filtered[offset] != stemmer.stem(ambiguous_word):
+                raise ValueError("Word at offset {} is {}: not an ambiguous word".
+                                 format(offset, filtered[offset]))
+
+            context = sized_context(offset, window_radius, filtered)
+            context_vectors.append(context_vector_from_context(context,
+                                                               word_vectors))
+
+        context_matrix = vstack(context_vectors)
+        svd_matrix = svd_reduced_eigenvectors(context_matrix,
+                                              svd_dim_num)
+
+        # +++++++++ SVD switch here +++++++++++
+        labels[ambiguous_word] = estimators[ambiguous_word].predict(svd_matrix)
+        #labels[ambiguous_word] = estimators[ambiguous_word].predict(context_matrix))
+
+    for k, v in labels.items():
+        logging.info("  {} label counts: {}".format(k,
+                                                    Counter(v).most_common()))
+    logging.info("labels(h/l/s): {}/{}/{}".
+                 format(
+                     len(labels['hard']),
+                     len(labels['line']),
+                     len(labels['serve'])))
+    logging.info("end test")
+
+    return labels
+
+
+logging.disable(logging.CRITICAL)
 train_corpus, test_corpus, correct_labels, offsets = split_corpus()
 
-senses, words = train_sec_order(train_corpus, ambiguous_words)
-labels = test_sec_order(test_corpus, ambiguous_words, senses, words, offsets)
+#for feat_num in [100, 1000, 4000]:
+#    for dim_num in [10, 100, 400]:
+#        print feat_num, dim_num
 
-#print 'labels ', labels
-#print 'correct labels ', correct_labels
+for i in range(1):
+    print "1st order"
+    senses, dimensions, estim = train_fir_order(train_corpus, ambiguous_words)
+    labels = test_fir_order(test_corpus, ambiguous_words, estim, offsets, dimensions)
+    compute_precision(labels, correct_labels)
 
+    print "2nd order"
+    senses, words, estim = train_sec_order(train_corpus, ambiguous_words)
+    labels = test_sec_order(test_corpus, ambiguous_words, estim, offsets, words)
+    compute_precision(labels, correct_labels)
 
-compute_precision(labels, correct_labels)
+    print "#######################"

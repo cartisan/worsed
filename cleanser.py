@@ -56,7 +56,6 @@ def cleanse_corpus_pos_aware(corpus, old_pos):
             new_corpus[i] = new_corpus[i].lower()
             break
 
-    #assert new_pos > -1, "marked word was deleted during cleanseing"
     if new_pos < 0:
         print "++++++++++++++++++++++"
         print corpus
