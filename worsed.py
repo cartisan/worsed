@@ -3,19 +3,17 @@ from collections import Counter
 from nltk.probability import FreqDist
 from nltk import ConcordanceIndex
 from nltk.stem.porter import PorterStemmer
-from numpy import array, zeros, vstack, linspace, diag, dot, mean
+from numpy import zeros, vstack, mean
 from numpy import sum as npsum
-from numpy.linalg import norm
-from scipy.linalg import svd
 from scipy.cluster.vq import kmeans2
-from scipy.spatial.distance import cosine
 from sklearn.cluster import KMeans
 
 from senseval_adapter import split_corpus
 from cleanser import cleanse_corpus
+from util import *
 
 
-logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s | %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s')
 
 # constants
 feat_num = 4000  # number of words to build word-vectors for
@@ -24,131 +22,6 @@ svd_dim_num = 100  # number of dimensions in svd-space
 window_radius = 25  # how many words to include on each side of occurance
 cluster_num = 2
 ambiguous_words = ['hard', 'line', 'serve']
-
-
-
-#train_corpus = ['"', 'But', 'I', "don't", 'want', 'to', 'go', 'among', 'mad', 'people', ',', '"', 'Alice', 'remarked', '.', 'Oh', ',',
-#'you', "can't", 'help', 'that', ',', 'said', 'the', 'Cat', ':', "'we're", 'all', 'mad', 'here', '.', "I'm", 'mad', '.', "You're", 'mad', '.',
-#'How', 'do', 'you', 'know', "I'm", 'mad', '?', 'said', 'Alice', '.', 'You', 'must', 'be', ',', 'said', 'the', 'Cat', ',', 'or', 'you',
-#"wouldn't", 'have', 'come', 'here', '.']
-#
-#test_corpus = train_corpus
-
-
-def draw_word_senses(sense_vectors, context_vectors, labels):
-    """ Utility function that draws sense-vectors as o in different
-    colours and context vectors as black x.
-    """
-
-    import matplotlib.pyplot as plt
-    import matplotlib.cm as cm
-
-    if len(sense_vectors[0]) > 2:
-        sense_vectors = svd_reduced_original(sense_vectors, 2)
-    if len(context_vectors[0]) > 2:
-        context_vectors = svd_reduced_original(context_vectors, 2)
-
-    col = cm.rainbow(linspace(0, 1, cluster_num))
-    plt.figure()
-
-    plt.scatter(sense_vectors[:, 0], sense_vectors[:, 1], marker='o', c=col, s=100)
-
-    for i in range(len(sense_vectors)):
-        cluster_i = [vector for vector, label in
-                     zip(context_vectors, labels) if label == i]
-        for x, y in cluster_i:
-            plt.plot(x, y, marker='x', color=col[i])
-
-    plt.show()
-
-
-
-
-def sized_context(word_index, window_radius, corpus):
-    """ Returns a list containing the window_size amount of words to the left
-    and to the right of word_index, not including the word at word_index.
-    """
-
-    max_length = len(corpus)
-
-    left_border = word_index - window_radius
-    left_border = 0 if word_index - window_radius < 0 else left_border
-
-    right_border = word_index + 1 + window_radius
-    right_border = max_length if right_border > max_length else right_border
-
-    return corpus[left_border:word_index] + corpus[word_index+1: right_border]
-
-
-def word_vector_from_context(context, dimensions):
-    """ Takes a list of words as context and a list of words as dimensions
-    and returns a vector denoting how often each dimension word appeared
-    in the context. Order of dimensions in return is presereved.
-    """
-
-    word_vector = []
-    # slow! Manual: context.count(word) for each word would be faster
-    counts = Counter(context)
-
-    for word in dimensions:
-        # slow! if/else would be faster
-        count = counts.get(word, 0)
-        word_vector.append(count)
-
-    return word_vector
-
-
-def context_vector_from_context(context, word_vectors):
-    """ Takes a list of words as context and all the word vectors.
-    Returns a context vector that is the centroid of the word vectors
-    that occured in the context. Thus gives us second-order co-occurence
-    with the dimension words.
-    """
-
-    dim_num = len(word_vectors.values()[0])
-    centroid = zeros(dim_num, int)
-
-    for word in context:
-        if word in word_vectors:
-            centroid += array(word_vectors[word])
-
-    return centroid
-
-
-def svd_reduced_eigenvectors(matrix, dim):
-    """ Takes a matrix of size N x M and returns it's
-    left eigenvector reduced to dim dimensions.
-    """
-
-    U, _, _ = svd(matrix, True)
-    return U[:, :dim]
-
-
-def svd_reduced_original(matrix, dim):
-    """ Takes a matrix of size N x M and
-    returns the best approximation of dimension
-    N x dim (in a least square sense).
-    """
-
-    U, s, V = svd(matrix, True)
-
-    # reduce dimensionality
-    S = zeros((len(U), dim), float)
-    S[:dim, :dim] = diag(s)[:dim, :dim]
-    return dot(U, dot(S, V[:dim, :dim]))
-
-
-def assign_sense(context_vector, sense_vectors):
-    " Returns the index of the sense vector most similar to context_vector."
-
-    cos_similarities = []
-    for sense in sense_vectors:
-        if norm(sense) == 0:
-            continue
-
-        cos_similarities.append(cosine(context_vector, sense))
-
-    return cos_similarities.index(min(cos_similarities))
 
 
 def compute_precision(computed, correct):
@@ -243,8 +116,6 @@ def train_fir_order(corpus, ambigous_words):
         labels = estimator.labels_
         estimators[word] = estimator
 
-        #draw_word_senses(svd_centroids, svd_matrix, labels)
-
         # labels tell which context belongs to which cluster in svd
         # space. Compute centroids in word space according to that
         logging.info("    Start centroid computation")
@@ -332,14 +203,12 @@ def train_sec_order(corpus, ambigous_words):
         labels = estimator.labels_
         estimators[word] = estimator
 
-        #draw_word_senses(svd_centroids, svd_matrix, labels)
-
         # labels tell which context belongs to which cluster in svd
         # space. Compute centroids in word space according to that
         logging.info("    Start centroid computation")
         centroids = []
         for i in range(cluster_num):
-            cluster_i = [vector for vector, label in\
+            cluster_i = [vector for vector, label in
                          zip(vectors, labels) if label == i]
             try:
                 centroids.append(npsum(vstack(cluster_i), 0))
