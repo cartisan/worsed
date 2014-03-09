@@ -1,0 +1,10 @@
+WorSeD is an prototypical open source implementation of Schütze's Word-sense discrimination algorithm.
+It was developed in the course of the seminar "Ambiguity and Polysemy" at the Cognitive Science Institute of the University of Osnabrück.
+The goal of the project was to show that the algroithm proposed by Schütze can be simplified by using first-order co-occurrence instead of second-order.
+
+The evaluation on a subset of NLTK's Senseval2 corpus was not able to reproduce the discriminative results presented by Schütze. Rather it exhibits an
+below-baseline performance. A statistically significant difference in accuracy between both implemented approaches was however not found which backs
+the initial claim. This holds only if the implementation can be validated.
+
+The original implementation by Schütze can be found at: **Placeholder**
+A paper with detailed analysis and results can be found in the repository.
